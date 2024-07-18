@@ -5,66 +5,124 @@ use anchor_lang::prelude::*;
 declare_id!("43Mr5YN8ktoWwFLtr8GEZQ6D3kYtwwyaJjK3ZR6bnLMY");
 
 #[program]
-pub mod counter {
+pub mod issuer {
     use super::*;
 
-  pub fn close(_ctx: Context<CloseCounter>) -> Result<()> {
-    Ok(())
-  }
+    pub fn create_cert_issuer(
+        ctx: Context<CreateCertIssuer>,
+        name: String,
+        address: String,
+       // typ_issuer: TypeIssuer,
+    ) -> Result<()> {
+        msg!("Certification Issuer Created");
+        msg!("Name: {}", name);
+        msg!("Adress: {}", address);
+       // msg!("Type: {:?}", typ_issuer);
 
-  pub fn decrement(ctx: Context<Update>) -> Result<()> {
-    ctx.accounts.counter.count = ctx.accounts.counter.count.checked_sub(1).unwrap();
-    Ok(())
-  }
+        let cert_issuer = &mut ctx.accounts.cert_issuer;
+        cert_issuer.owner = ctx.accounts.owner.key();
+        cert_issuer.name = name;
+        cert_issuer.address = address;
+      //  cert_issuer.typ_issuer = typ_issuer;
+        cert_issuer.validated = false;
+        cert_issuer.active = false;
 
-  pub fn increment(ctx: Context<Update>) -> Result<()> {
-    ctx.accounts.counter.count = ctx.accounts.counter.count.checked_add(1).unwrap();
-    Ok(())
-  }
+        Ok(())
+    }
 
-  pub fn initialize(_ctx: Context<InitializeCounter>) -> Result<()> {
-    Ok(())
-  }
+    pub fn activate_desactivate_cert_issuer(
+        ctx: Context<UpdateCertIssuer>,
+        active: bool,
+    ) -> Result<()> {
+        msg!("Certification Issuer Activation/Desactivation");
+        msg!("Active: {}", active);
 
-  pub fn set(ctx: Context<Update>, value: u8) -> Result<()> {
-    ctx.accounts.counter.count = value.clone();
-    Ok(())
-  }
+        let cert_issuer = &mut ctx.accounts.cert_issuer;
+        cert_issuer.active = active;
+
+        Ok(())
+    }
+
+    pub fn validate_unvalidation_cert_issuer(
+        ctx: Context<UpdateCertIssuer>,
+        validated: bool,
+    ) -> Result<()> {
+        msg!("Certification Issuer Validation/Unvalidation");
+        msg!("Validated: {}", validated);
+
+        let cert_issuer = &mut ctx.accounts.cert_issuer;
+        cert_issuer.validated = validated;
+
+        Ok(())
+    }
+
+    pub fn delete_cert_issuer(_ctx: Context<DeleteCertIssuer>, name: String) -> Result<()> {
+        msg!("Certification Issuer {} Deleted", name);
+        Ok(())
+    }
+
 }
 
 #[derive(Accounts)]
-pub struct InitializeCounter<'info> {
-  #[account(mut)]
-  pub payer: Signer<'info>,
-
-  #[account(
-  init,
-  space = 8 + Counter::INIT_SPACE,
-  payer = payer
+#[instruction(name: String)]
+pub struct CreateCertIssuer<'info> {
+    #[account(
+    init,
+    payer =owner,
+    space = 8 + CertIssuerState::MAX_SIZE, 
+    seeds= [b"Issuer".as_ref(),name.as_bytes(), owner.key().as_ref()],
+    bump,
   )]
-  pub counter: Account<'info, Counter>,
-  pub system_program: Program<'info, System>,
+    pub cert_issuer: Account<'info, CertIssuerState>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
-#[derive(Accounts)]
-pub struct CloseCounter<'info> {
-  #[account(mut)]
-  pub payer: Signer<'info>,
 
-  #[account(
-  mut,
-  close = payer, // close account and return lamports to payer
+#[derive(Accounts)]
+pub struct UpdateCertIssuer<'info> {
+    #[account(mut, has_one=owner )]
+    pub cert_issuer: Account<'info, CertIssuerState>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(name: String)]
+pub struct DeleteCertIssuer<'info> {
+    #[account(
+    mut,
+    seeds= [b"Issuer".as_ref(),name.as_bytes(), owner.key().as_ref()],
+    bump,
+    close=owner,
   )]
-  pub counter: Account<'info, Counter>,
-}
-
-#[derive(Accounts)]
-pub struct Update<'info> {
-  #[account(mut)]
-  pub counter: Account<'info, Counter>,
+    pub cert_issuer: Account<'info, CertIssuerState>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[account]
-#[derive(InitSpace)]
-pub struct Counter {
-  count: u8,
+pub struct CertIssuerState {
+    pub owner: Pubkey,          //32
+    pub name: String,           //32
+    pub address: String,        //32
+   // pub typ_issuer: TypeIssuer, // 1 + 1
+    pub validated: bool,        // 1
+    pub active: bool,           // 1
 }
+
+impl CertIssuerState {
+    pub const MAX_SIZE: usize = 32 + 32 + 32 + (1 + 1) + 1 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum TypeIssuer {
+    School = 0,
+    University = 1,
+    TrainingCenter = 2,
+}
+
+
